@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35707.178 d17.12
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "etcd.v3", "etcd.v3\etcd.v3.csproj", "{1E98B05F-2C4C-459B-B44C-BB3228C8F9AE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "etcd.v3", "src\etcd.v3\etcd.v3.csproj", "{1E98B05F-2C4C-459B-B44C-BB3228C8F9AE}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test", "Test\Test.csproj", "{1FC5AF67-2629-4563-ADAC-500D5006AA81}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test", "test\Test\Test.csproj", "{1FC5AF67-2629-4563-ADAC-500D5006AA81}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "etcd.v3.Configuration", "etcd.v3.Configuration\etcd.v3.Configuration.csproj", "{238D25F8-18D7-40D1-919E-193EBDB3E55B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "etcd.v3.Configuration", "src\etcd.v3.Configuration\etcd.v3.Configuration.csproj", "{238D25F8-18D7-40D1-919E-193EBDB3E55B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
