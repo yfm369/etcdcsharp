@@ -79,7 +79,7 @@ public partial class EtcdClientFactory : IEtcdClientFactory
             channel = GrpcChannel.ForAddress(options.Address[0], grpcChannelOptions);
         else
         {
-            channel = GrpcChannel.ForAddress(resolverFactory.AddAddress(options.Address, grpcChannelOptions));
+            channel = GrpcChannel.ForAddress(resolverFactory.AddAddress(options.Address, grpcChannelOptions),grpcChannelOptions);
         }
         CallInvoker callInvoker = options.Interceptors != null && options.Interceptors.Length > 0
             ? channel.Intercept(options.Interceptors)
