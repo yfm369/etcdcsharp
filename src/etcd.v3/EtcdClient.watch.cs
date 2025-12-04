@@ -1,4 +1,4 @@
-﻿using Etcdserverpb;
+using Etcdserverpb;
 using Google.Protobuf;
 using Grpc.Core;
 using System;
@@ -59,26 +59,44 @@ public partial class EtcdClient : IEtcdClient
     {
         return Task.Factory.StartNew(async () =>
         {
-            try
+            // 退避策略：初始延迟100ms，最大延迟5s，每次失败后延迟翻倍
+            int retryDelay = 100;
+            const int maxRetryDelay = 5000;
+            
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var watcher = await WatchRangeAsync(path, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
-                await watcher.ForAllAsync(reWatchWhenException
-                    ? i =>
+                try
                 {
-                    startRevision = i.FindRevision(startRevision);
-                    return func(i);
+                    var watcher = await WatchRangeAsync(path, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
+                    await watcher.ForAllAsync(reWatchWhenException
+                        ? i =>
+                    {
+                        startRevision = i.FindRevision(startRevision);
+                        return func(i);
+                    }
+                    : func, CancellationToken.None);
                 }
-                : func, CancellationToken.None);
-            }
-            catch (Exception e)
-            {
-                ex?.Invoke(e);
-                if (reWatchWhenException)
+                catch (Exception e)
                 {
-                    WatchRangeBackendAsync(path, func, headers, deadline, startRevision, noPut, noDelete, ex, reWatchWhenException, CancellationToken.None);
+                    // 忽略TaskCanceledException，因为这通常是正常的取消操作
+                    if (e is TaskCanceledException && cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    ex?.Invoke(e);
+                    if (!reWatchWhenException || cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    // 应用退避策略，在重试前添加延迟
+                    await Task.Delay(retryDelay, cancellationToken);
+                    // 延迟翻倍，但不超过最大延迟
+                    retryDelay = Math.Min(retryDelay * 2, maxRetryDelay);
                 }
             }
-        });
+        }, cancellationToken);
     }
 
     public Task WatchBackendAsync(string key, Func<WatchResponse, Task> func, Metadata headers = null, DateTime? deadline = null, long startRevision = 0,
@@ -86,26 +104,44 @@ public partial class EtcdClient : IEtcdClient
     {
         return Task.Factory.StartNew(async () =>
         {
-            var watcher = await WatchAsync(key, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
-            try
+            // 退避策略：初始延迟100ms，最大延迟5s，每次失败后延迟翻倍
+            int retryDelay = 100;
+            const int maxRetryDelay = 5000;
+            
+            while (!cancellationToken.IsCancellationRequested)
             {
-                await watcher.ForAllAsync(reWatchWhenException
-                    ? i =>
-                    {
-                        startRevision = i.FindRevision(startRevision);
-                        return func(i);
-                    }
-                : func, CancellationToken.None);
-            }
-            catch (Exception e)
-            {
-                ex?.Invoke(e);
-                if (reWatchWhenException)
+                var watcher = await WatchAsync(key, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
+                try
                 {
-                    WatchBackendAsync(key, func, headers, deadline, startRevision, noPut, noDelete, ex, reWatchWhenException, CancellationToken.None);
+                    await watcher.ForAllAsync(reWatchWhenException
+                        ? i =>
+                        {
+                            startRevision = i.FindRevision(startRevision);
+                            return func(i);
+                        }
+                    : func, CancellationToken.None);
+                }
+                catch (Exception e)
+                {
+                    // 忽略TaskCanceledException，因为这通常是正常的取消操作
+                    if (e is TaskCanceledException && cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    ex?.Invoke(e);
+                    if (!reWatchWhenException || cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    // 应用退避策略，在重试前添加延迟
+                    await Task.Delay(retryDelay, cancellationToken);
+                    // 延迟翻倍，但不超过最大延迟
+                    retryDelay = Math.Min(retryDelay * 2, maxRetryDelay);
                 }
             }
-        });
+        }, cancellationToken);
     }
 
     private static WatchRequest CreateWatchReq(string key, long startRevision, bool noPut, bool noDelete)
