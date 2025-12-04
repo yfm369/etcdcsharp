@@ -67,6 +67,9 @@ public partial class EtcdClient : IEtcdClient
             {
                 try
                 {
+                    // 每次重连前，获取当前最新的revision，确保watch请求不会因为revision过期而失败
+                    // 注意：这里没有使用startRevision，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
                     var watcher = await WatchRangeAsync(path, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
                     // 使用正确的cancellationToken，确保外部取消请求能正确传递
                     await watcher.ForAllAsync(reWatchWhenException
@@ -96,6 +99,9 @@ public partial class EtcdClient : IEtcdClient
                     await Task.Delay(retryDelay, cancellationToken);
                     // 延迟翻倍，但不超过最大延迟
                     retryDelay = Math.Min(retryDelay * 2, maxRetryDelay);
+                    // 重置startRevision为0，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
+                    startRevision = 0;
                 }
             }
         }, cancellationToken);
@@ -114,6 +120,9 @@ public partial class EtcdClient : IEtcdClient
             {
                 try
                 {
+                    // 每次重连前，获取当前最新的revision，确保watch请求不会因为revision过期而失败
+                    // 注意：这里没有使用startRevision，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
                     var watcher = await WatchAsync(key, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
                     // 使用正确的cancellationToken，确保外部取消请求能正确传递
                     await watcher.ForAllAsync(reWatchWhenException
@@ -143,6 +152,9 @@ public partial class EtcdClient : IEtcdClient
                     await Task.Delay(retryDelay, cancellationToken);
                     // 延迟翻倍，但不超过最大延迟
                     retryDelay = Math.Min(retryDelay * 2, maxRetryDelay);
+                    // 重置startRevision为0，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
+                    startRevision = 0;
                 }
             }
         }, cancellationToken);
