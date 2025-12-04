@@ -29,8 +29,8 @@ public partial interface IEtcdClient
 
 public partial class EtcdClient : IEtcdClient
 {
-    private Watch.WatchClient watchClient;
-    public Watch.WatchClient WatchClient => watchClient ??= new Watch.WatchClient(callInvoker);
+    // 不使用懒加载，每次访问时都创建一个新的WatchClient实例，确保使用有效的连接
+    public Watch.WatchClient WatchClient => new Watch.WatchClient(callInvoker);
 
     public async Task<EtcdWatcher> WatchAsync(WatchRequest request, Metadata headers = null, DateTime? deadline = null,
         CancellationToken cancellationToken = default)
