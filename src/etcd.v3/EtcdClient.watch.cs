@@ -68,13 +68,15 @@ public partial class EtcdClient : IEtcdClient
                 try
                 {
                     var watcher = await WatchRangeAsync(path, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
+                    // 使用正确的cancellationToken，确保外部取消请求能正确传递
                     await watcher.ForAllAsync(reWatchWhenException
                         ? i =>
                     {
+                        // 更新startRevision，确保下次重连时使用正确的起始版本
                         startRevision = i.FindRevision(startRevision);
                         return func(i);
                     }
-                    : func, CancellationToken.None);
+                    : func, cancellationToken);
                 }
                 catch (Exception e)
                 {
@@ -110,16 +112,18 @@ public partial class EtcdClient : IEtcdClient
             
             while (!cancellationToken.IsCancellationRequested)
             {
-                var watcher = await WatchAsync(key, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
                 try
                 {
+                    var watcher = await WatchAsync(key, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
+                    // 使用正确的cancellationToken，确保外部取消请求能正确传递
                     await watcher.ForAllAsync(reWatchWhenException
                         ? i =>
                         {
+                            // 更新startRevision，确保下次重连时使用正确的起始版本
                             startRevision = i.FindRevision(startRevision);
                             return func(i);
                         }
-                    : func, CancellationToken.None);
+                    : func, cancellationToken);
                 }
                 catch (Exception e)
                 {
