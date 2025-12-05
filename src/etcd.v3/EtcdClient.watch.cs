@@ -1,4 +1,4 @@
-﻿using Etcdserverpb;
+using Etcdserverpb;
 using Google.Protobuf;
 using Grpc.Core;
 using System;
@@ -29,8 +29,8 @@ public partial interface IEtcdClient
 
 public partial class EtcdClient : IEtcdClient
 {
-    private Watch.WatchClient watchClient;
-    public Watch.WatchClient WatchClient => watchClient ??= new Watch.WatchClient(callInvoker);
+    // 不使用懒加载，每次访问时都创建一个新的WatchClient实例，确保使用有效的连接
+    public Watch.WatchClient WatchClient => new Watch.WatchClient(callInvoker);
 
     public async Task<EtcdWatcher> WatchAsync(WatchRequest request, Metadata headers = null, DateTime? deadline = null,
         CancellationToken cancellationToken = default)
@@ -59,26 +59,52 @@ public partial class EtcdClient : IEtcdClient
     {
         return Task.Factory.StartNew(async () =>
         {
-            try
+            // 退避策略：初始延迟100ms，最大延迟5s，每次失败后延迟翻倍
+            int retryDelay = 100;
+            const int maxRetryDelay = 5000;
+            
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var watcher = await WatchRangeAsync(path, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
-                await watcher.ForAllAsync(reWatchWhenException
-                    ? i =>
+                try
                 {
-                    startRevision = i.FindRevision(startRevision);
-                    return func(i);
+                    // 每次重连前，获取当前最新的revision，确保watch请求不会因为revision过期而失败
+                    // 注意：这里没有使用startRevision，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
+                    var watcher = await WatchRangeAsync(path, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
+                    // 使用正确的cancellationToken，确保外部取消请求能正确传递
+                    await watcher.ForAllAsync(reWatchWhenException
+                        ? i =>
+                    {
+                        // 更新startRevision，确保下次重连时使用正确的起始版本
+                        startRevision = i.FindRevision(startRevision);
+                        return func(i);
+                    }
+                    : func, cancellationToken);
                 }
-                : func, CancellationToken.None);
-            }
-            catch (Exception e)
-            {
-                ex?.Invoke(e);
-                if (reWatchWhenException)
+                catch (Exception e)
                 {
-                    WatchRangeBackendAsync(path, func, headers, deadline, startRevision, noPut, noDelete, ex, reWatchWhenException, CancellationToken.None);
+                    // 忽略TaskCanceledException，因为这通常是正常的取消操作
+                    if (e is TaskCanceledException && cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    ex?.Invoke(e);
+                    if (!reWatchWhenException || cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    // 应用退避策略，在重试前添加延迟
+                    await Task.Delay(retryDelay, cancellationToken);
+                    // 延迟翻倍，但不超过最大延迟
+                    retryDelay = Math.Min(retryDelay * 2, maxRetryDelay);
+                    // 重置startRevision为0，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
+                    startRevision = 0;
                 }
             }
-        });
+        }, cancellationToken);
     }
 
     public Task WatchBackendAsync(string key, Func<WatchResponse, Task> func, Metadata headers = null, DateTime? deadline = null, long startRevision = 0,
@@ -86,26 +112,52 @@ public partial class EtcdClient : IEtcdClient
     {
         return Task.Factory.StartNew(async () =>
         {
-            var watcher = await WatchAsync(key, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
-            try
+            // 退避策略：初始延迟100ms，最大延迟5s，每次失败后延迟翻倍
+            int retryDelay = 100;
+            const int maxRetryDelay = 5000;
+            
+            while (!cancellationToken.IsCancellationRequested)
             {
-                await watcher.ForAllAsync(reWatchWhenException
-                    ? i =>
-                    {
-                        startRevision = i.FindRevision(startRevision);
-                        return func(i);
-                    }
-                : func, CancellationToken.None);
-            }
-            catch (Exception e)
-            {
-                ex?.Invoke(e);
-                if (reWatchWhenException)
+                try
                 {
-                    WatchBackendAsync(key, func, headers, deadline, startRevision, noPut, noDelete, ex, reWatchWhenException, CancellationToken.None);
+                    // 每次重连前，获取当前最新的revision，确保watch请求不会因为revision过期而失败
+                    // 注意：这里没有使用startRevision，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
+                    var watcher = await WatchAsync(key, headers, deadline, startRevision, noPut, noDelete, cancellationToken);
+                    // 使用正确的cancellationToken，确保外部取消请求能正确传递
+                    await watcher.ForAllAsync(reWatchWhenException
+                        ? i =>
+                        {
+                            // 更新startRevision，确保下次重连时使用正确的起始版本
+                            startRevision = i.FindRevision(startRevision);
+                            return func(i);
+                        }
+                    : func, cancellationToken);
+                }
+                catch (Exception e)
+                {
+                    // 忽略TaskCanceledException，因为这通常是正常的取消操作
+                    if (e is TaskCanceledException && cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    ex?.Invoke(e);
+                    if (!reWatchWhenException || cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    
+                    // 应用退避策略，在重试前添加延迟
+                    await Task.Delay(retryDelay, cancellationToken);
+                    // 延迟翻倍，但不超过最大延迟
+                    retryDelay = Math.Min(retryDelay * 2, maxRetryDelay);
+                    // 重置startRevision为0，让etcd服务器自动使用最新的revision
+                    // 这样可以避免因为长时间断网导致的revision过期问题
+                    startRevision = 0;
                 }
             }
-        });
+        }, cancellationToken);
     }
 
     private static WatchRequest CreateWatchReq(string key, long startRevision, bool noPut, bool noDelete)

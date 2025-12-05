@@ -30,6 +30,8 @@ public class StaticAddressResolverFactory
 
     private IEnumerable<BalancerAddress> FindAddress(Uri uri)
     {
-        return address[uri.ToString()];
+        // Remove path from URI to match the key format stored in the dictionary
+        var key = uri.GetLeftPart(UriPartial.Authority);
+        return address[key];
     }
 }
